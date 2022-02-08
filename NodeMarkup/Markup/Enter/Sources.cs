@@ -122,7 +122,7 @@ namespace NodeMarkup.Manager
 
         public uint LaneId { get; }
         public NetLane NetLane => LaneId.GetLane();
-
+        public NetInfo.Lane Info { get; }
         public float Position { get; }
         public float HalfWidth { get; }
         public float LeftSidePos => Position + (Enter.IsLaneInvert ? -HalfWidth : HalfWidth);
@@ -132,6 +132,7 @@ namespace NodeMarkup.Manager
         {
             Enter = enter;
             LaneId = laneId;
+            Info = info;
             Position = info.m_position;
             HalfWidth = Mathf.Abs(info.m_width) / 2;
         }

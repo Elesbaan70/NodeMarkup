@@ -34,6 +34,8 @@ namespace NodeMarkup.Manager
         public Vector3 LastPointSide { get; private set; }
         public StraightTrajectory Line { get; private set; }
         public bool LanesChanged => GetSegment().m_lanes != FirstLane;
+        public bool IsStartEndDistinct { get; private set; }
+        public string NetName { get; private set; }
 
         public IEnumerable<DriveLane> DriveLanes
         {
@@ -96,6 +98,7 @@ namespace NodeMarkup.Manager
             FirstLane = segment.m_lanes;
 
             var sources = new List<IPointSource>();
+            DriveLane[] driveLanes = null;
 
             if (segment.Info is IMarkingNetInfo info)
             {
@@ -104,7 +107,7 @@ namespace NodeMarkup.Manager
             }
             else
             {
-                var driveLanes = DriveLanes.ToArray();
+                driveLanes ??= DriveLanes.ToArray();
                 if (driveLanes.Any())
                 {
                     for (var i = 0; i <= driveLanes.Length; i += 1)
@@ -117,8 +120,46 @@ namespace NodeMarkup.Manager
                 }
             }
 
+            IsStartEndDistinct = segment.Info.m_forwardVehicleLaneCount != segment.Info.m_backwardVehicleLaneCount;
+
+            if (!IsStartEndDistinct)
+            {
+                driveLanes ??= DriveLanes.ToArray();
+                for (int i = 0; !IsStartEndDistinct && i < (driveLanes.Length + 1) / 2; i += 1)
+                {
+                    var left = driveLanes[i];
+                    var right = driveLanes[driveLanes.Length - i - 1];
+                    IsStartEndDistinct = left.Info.m_direction != Reverse(right.Info.m_direction)
+                                            || left.Position != -right.Position
+                                            || left.HalfWidth != right.HalfWidth;
+                }
+            }
+
+            NetName = segment.Info.name;
+
             var points = sources.Select(s => new MarkupEnterPoint(this, s)).ToArray();
             EnterPointsDic = points.ToDictionary(p => p.Num, p => p);
+        }
+
+        private static NetInfo.Direction Reverse(NetInfo.Direction direction)
+        {
+            switch (direction)
+            {
+                case NetInfo.Direction.Forward:
+                    return NetInfo.Direction.Backward;
+
+                case NetInfo.Direction.Backward:
+                    return NetInfo.Direction.Forward;
+
+                case NetInfo.Direction.AvoidForward:
+                    return NetInfo.Direction.AvoidBackward;
+
+                case NetInfo.Direction.AvoidBackward:
+                    return NetInfo.Direction.AvoidForward;
+
+                default:
+                    return direction;
+            }
         }
 
         protected abstract ushort GetSegmentId();
@@ -221,6 +262,8 @@ namespace NodeMarkup.Manager
         public int Points { get; private set; }
         public float NormalAngle { get; private set; }
         public float CornerAngle { get; private set; }
+        public string NetName { get; private set; }
+        public bool? IsLaneInvert { get; private set; }
 
         public string XmlSection => Enter.XmlName;
 
@@ -231,6 +274,8 @@ namespace NodeMarkup.Manager
             Points = enter.PointCount;
             NormalAngle = enter.NormalAngle;
             CornerAngle = enter.CornerAngle;
+            NetName = enter.NetName;
+            IsLaneInvert = enter.IsStartEndDistinct ? enter.IsLaneInvert : default;
         }
         public static EnterData FromXml(XElement config)
         {
@@ -238,7 +283,9 @@ namespace NodeMarkup.Manager
             {
                 Id = config.GetAttrValue<ushort>(nameof(Id)),
                 Points = config.GetAttrValue<int>("P"),
-                NormalAngle = config.GetAttrValue<float>("A")
+                NormalAngle = config.GetAttrValue<float>("A"),
+                NetName = config.GetAttrValue<string>("N"),
+                IsLaneInvert = config.GetAttrValue("I", default(bool?)),
             };
             return data;
         }
@@ -249,6 +296,9 @@ namespace NodeMarkup.Manager
             config.AddAttr(nameof(Id), Id);
             config.AddAttr("P", Points);
             config.AddAttr("A", NormalAngle);
+            config.AddAttr("N", NetName);
+            if (IsLaneInvert.HasValue)
+                config.AddAttr("I", IsLaneInvert.Value);
             return config;
         }
     }

@@ -126,6 +126,8 @@ namespace NodeMarkup.UI.Editors
         {
             if (editObject.Enters.Length != Tool.Markup.EntersCount)
                 return IntersectionTemplateFit.Poor;
+            else if (AssetsMatch(editObject, Tool.Markup))
+                return IntersectionTemplateFit.Perfect;
             else if (PointsMatch(editObject, Tool.Markup))
                 return IntersectionTemplateFit.Close;
             else if (SimilarWidth(editObject, Tool.Markup))
@@ -133,25 +135,41 @@ namespace NodeMarkup.UI.Editors
             else
                 return IntersectionTemplateFit.Poor;
         }
-        private bool PointsMatch(IntersectionTemplate template, Markup markup)
+        private bool EntersMatch(IntersectionTemplate template, Markup markup, Func<EnterData, Enter, bool> compare)
         {
-            var templatePoints = template.Enters.Select(e => e.Points).ToArray();
-            var markupPoints = markup.Enters.Select(e => e.PointCount).ToArray();
-            if (markupPoints.Length == templatePoints.Length)
+            var markupEnters = markup.Enters;
+            if (markupEnters.Count() == template.Enters.Length)
             {
                 for (int i = 0; i < 2; i += 1)
                 {
-                    for (int start = 0; start < templatePoints.Length; start += 1)
+                    for (int start = 0; start < template.Enters.Length; start += 1)
                     {
-                        if (templatePoints.Skip(start).Concat(templatePoints.Take(start)).SequenceEqual(markupPoints))
+                        var pairs = markupEnters.Skip(start).Concat(markupEnters.Take(start))
+                                    .Select((markup, index) => new { markup, template = template.Enters[index] });
+                        if (!pairs.Any(p => !compare(p.template, p.markup)))
                             return true;
                     }
-                    templatePoints = templatePoints.Reverse().ToArray();
+                    markupEnters = markupEnters.Reverse();
                 }
             }
             return false;
         }
-
+        private bool AssetsMatch(IntersectionTemplate template, Markup markup)
+        {
+            return EntersMatch(template, markup, (templateEnter, markupEnter) =>
+            {
+                return templateEnter.NetName == markupEnter.NetName
+                        && (!templateEnter.IsLaneInvert.HasValue || templateEnter.IsLaneInvert.Value == markupEnter.IsLaneInvert);
+            });
+        }
+        private bool PointsMatch(IntersectionTemplate template, Markup markup)
+        {
+            return EntersMatch(template, markup, (templateEnter, markupEnter) =>
+            {
+                return templateEnter.Points == markupEnter.PointCount
+                        && (!templateEnter.IsLaneInvert.HasValue || templateEnter.IsLaneInvert.Value == templateEnter.IsLaneInvert);
+            });
+        }
         private bool SimilarWidth(IntersectionTemplate template, Markup markup)
         {
             var templatePoints = template.Enters.Select(e => e.Points).ToArray();
