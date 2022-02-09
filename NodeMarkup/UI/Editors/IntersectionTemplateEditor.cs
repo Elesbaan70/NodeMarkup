@@ -158,7 +158,7 @@ namespace NodeMarkup.UI.Editors
         {
             return EntersMatch(template, markup, (templateEnter, markupEnter) =>
             {
-                return templateEnter.NetName == markupEnter.NetName
+                return templateEnter.RoadName == markupEnter.RoadName
                         && (!templateEnter.IsLaneInvert.HasValue || templateEnter.IsLaneInvert.Value == markupEnter.IsLaneInvert);
             });
         }

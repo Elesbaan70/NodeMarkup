@@ -1,5 +1,6 @@
 ﻿using ColossalFramework.Math;
 using ModsBridge;
+using ModsCommon;
 using ModsCommon.Utilities;
 using NodeMarkup.Tools;
 using NodeMarkup.Utilities;
@@ -34,8 +35,8 @@ namespace NodeMarkup.Manager
         public Vector3 LastPointSide { get; private set; }
         public StraightTrajectory Line { get; private set; }
         public bool LanesChanged => GetSegment().m_lanes != FirstLane;
+        public string RoadName => GetSegment().Info.name;
         public bool IsStartEndDistinct { get; private set; }
-        public string NetName { get; private set; }
 
         public IEnumerable<DriveLane> DriveLanes
         {
@@ -135,10 +136,9 @@ namespace NodeMarkup.Manager
                 }
             }
 
-            NetName = segment.Info.name;
-
             var points = sources.Select(s => new MarkupEnterPoint(this, s)).ToArray();
             EnterPointsDic = points.ToDictionary(p => p.Num, p => p);
+            ResetPoints();
         }
 
         private static NetInfo.Direction Reverse(NetInfo.Direction direction)
@@ -162,9 +162,9 @@ namespace NodeMarkup.Manager
             }
         }
 
-        protected abstract ushort GetSegmentId();
-        protected abstract ref NetSegment GetSegment();
-        protected abstract bool GetIsStartSide();
+        public abstract ushort GetSegmentId();
+        public abstract ref NetSegment GetSegment();
+        public abstract bool GetIsStartSide();
         public virtual bool TryGetPoint(byte pointNum, MarkupPoint.PointType type, out MarkupPoint point)
         {
             if (type == MarkupPoint.PointType.Enter && EnterPointsDic.TryGetValue(pointNum, out MarkupEnterPoint enterPoint))
@@ -225,8 +225,22 @@ namespace NodeMarkup.Manager
 
         public void ResetPoints()
         {
-            foreach (var point in Points)
-                point.Reset();
+            var points = Points.ToArray();
+            if (SingletonManager<RoadTemplateManager>.Instance.TryGetOffsets(RoadName, out var offsets))
+            {
+                for (var i = 0; i < Math.Min(offsets.Length, points.Length); i += 1)
+                {
+                    if (IsLaneInvert)
+                        points[points.Length - 1 - i].Offset.Value = -offsets[i];
+                    else
+                        points[i].Offset.Value = offsets[i];
+                }
+            }
+            else
+            {
+                foreach (var point in points)
+                    point.Reset();
+            }
         }
         public Vector3 GetPosition(float offset) => Position + offset / TranformCoef * CornerDir;
         public void Render(OverlayData data)
@@ -262,7 +276,7 @@ namespace NodeMarkup.Manager
         public int Points { get; private set; }
         public float NormalAngle { get; private set; }
         public float CornerAngle { get; private set; }
-        public string NetName { get; private set; }
+        public string RoadName { get; private set; }
         public bool? IsLaneInvert { get; private set; }
 
         public string XmlSection => Enter.XmlName;
@@ -274,7 +288,7 @@ namespace NodeMarkup.Manager
             Points = enter.PointCount;
             NormalAngle = enter.NormalAngle;
             CornerAngle = enter.CornerAngle;
-            NetName = enter.NetName;
+            RoadName = enter.RoadName;
             IsLaneInvert = enter.IsStartEndDistinct ? enter.IsLaneInvert : default;
         }
         public static EnterData FromXml(XElement config)
@@ -284,7 +298,7 @@ namespace NodeMarkup.Manager
                 Id = config.GetAttrValue<ushort>(nameof(Id)),
                 Points = config.GetAttrValue<int>("P"),
                 NormalAngle = config.GetAttrValue<float>("A"),
-                NetName = config.GetAttrValue<string>("N"),
+                RoadName = config.GetAttrValue<string>("N"),
                 IsLaneInvert = config.GetAttrValue("I", default(bool?)),
             };
             return data;
@@ -296,7 +310,7 @@ namespace NodeMarkup.Manager
             config.AddAttr(nameof(Id), Id);
             config.AddAttr("P", Points);
             config.AddAttr("A", NormalAngle);
-            config.AddAttr("N", NetName);
+            config.AddAttr("N", RoadName);
             if (IsLaneInvert.HasValue)
                 config.AddAttr("I", IsLaneInvert.Value);
             return config;
